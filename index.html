@@ -70,7 +70,7 @@ function updateUI(ch){
   
   statusEl.innerText = relayStatus[ch];
 
-  // Correct logic for active-low relay
+  // UI color logic
   if(relayStatus[ch]==="ON"){
     onBtn.className="on";    // green
     offBtn.className="off";  // red
@@ -83,10 +83,12 @@ function updateUI(ch){
   }
 }
 
-// ------------------------ SEND COMMAND ------------------------
+// ------------------------ SEND COMMAND (SWAPPED) ------------------------
 function sendCommand(ch, cmd){
   if(client.connected){
-    client.publish(`relay${ch}/control`, cmd); // firmware handles active-low
+    // Swap ON/OFF for firmware active-low
+    let swappedCmd = (cmd === "ON") ? "OFF" : "ON";
+    client.publish(`relay${ch}/control`, swappedCmd);
   } else {
     alert("MQTT is not connected!");
   }
