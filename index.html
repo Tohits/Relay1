@@ -3,29 +3,24 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>4-Channel Relay Control Dashboard</title>
+<title>4-Channel Relay Dashboard</title>
 <style>
   body { font-family: Arial, sans-serif; text-align:center; background:#f4f4f9; color:#333; }
   h2 { margin-top: 20px; }
-  .relay-container { margin: 20px auto; width: 300px; }
-  .relay-container p { font-size: 20px; }
-  button { width: 120px; height: 50px; font-size: 18px; margin: 5px; border:none; border-radius:10px; cursor:pointer; color:white; box-shadow:0 4px #666; transition:0.2s; }
-  button:active { box-shadow:0 2px #666; transform:translateY(2px); }
+  .relay-container { margin: 15px auto; }
+  button { width: 120px; height: 50px; font-size:18px; margin:5px; border:none; border-radius:10px; cursor:pointer; color:white; }
+  button:active { transform:translateY(2px); }
   .on { background: limegreen; }
   .off { background: tomato; }
   .disabled { background: gray; cursor: not-allowed; }
 
+  #espStatus { font-weight:bold; font-size:18px; }
   #mqttStatus { font-weight:bold; font-size:18px; margin-top:10px; }
-  .online { color: limegreen; font-weight: bold; }
-  .offline { color: red; font-weight: bold; }
-
-  .water-box { width: 260px; margin: 15px auto; background:#ddd; border-radius:15px; overflow:hidden; }
-  .water-level { height:30px; background:#2196f3; width:0%; color:white; font-weight:bold; line-height:30px; }
 </style>
 </head>
 <body>
 
-<h2>4-Channel Relay Dashboard</h2>
+<h2>4-Channel Relay Control</h2>
 
 <div class="relay-container">
   <p>Relay 1 Status: <b id="relay1Status">--</b></p>
@@ -56,99 +51,111 @@
 <p>ESP Status: <span id="espStatus" class="offline">OFFLINE</span></p>
 <p>ESP IP: <b id="espIP">--</b></p>
 <p>ESP Uptime: <b id="espUptime">--:--:--</b></p>
+<button onclick="resetESP()">RESET ESP</button>
 
-<p>Water Level:</p>
-<div class="water-box">
-  <div id="waterLevelBar" class="water-level">0%</div>
-</div>
-
-<button id="resetBtn" onclick="resetESP()">RESET ESP</button>
-
-<p>MQTT Status: <span id="mqttStatus">Disconnected</span></p>
+<p id="mqttStatus">MQTT: Disconnected</p>
 
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script>
-const broker = 'wss://93bad3def29641e399de9a7b9c676613.s1.eu.hivemq.cloud:8884/mqtt';
-const options = { username:'tohits', password:'toh123@TOH', reconnectPeriod:1000, clean:true, connectTimeout:4000 };
-const client = mqtt.connect(broker, options);
+  const broker = 'wss://93bad3def29641e399de9a7b9c676613.s1.eu.hivemq.cloud:8884/mqtt';
+  const options = {
+    username: 'tohits',
+    password: 'toh123@TOH',
+    reconnectPeriod: 1000,
+    clean: true,
+    connectTimeout: 4000,
+  };
+  const client = mqtt.connect(broker, options);
 
-let relayStatus = [null,"OFF","OFF","OFF","OFF"]; // relay1..4
+  let relayStatus = [null,"OFF","OFF","OFF","OFF"]; // 1..4
 
-function updateUI(ch){
-  const statusEl = document.getElementById(`relay${ch}Status`);
-  const onBtn = document.getElementById(`relay${ch}On`);
-  const offBtn = document.getElementById(`relay${ch}Off`);
-  statusEl.innerText = relayStatus[ch];
-  if(relayStatus[ch]==="ON"){
-    onBtn.className="on";
-    offBtn.className="off";
-  } else if(relayStatus[ch]==="OFF"){
-    onBtn.className="off";
-    offBtn.className="on";
-  } else {
-    onBtn.className="disabled";
-    offBtn.className="disabled";
-  }
-}
+  function updateRelayUI(ch){
+    const statusEl = document.getElementById(`relay${ch}Status`);
+    const onBtn = document.getElementById(`relay${ch}On`);
+    const offBtn = document.getElementById(`relay${ch}Off`);
 
-function sendCommand(ch, cmd){
-  if(client.connected){
-    // swap for active-low relay
-    const swap = (cmd==="ON")?"OFF":"ON";
-    client.publish(`relay${ch}/control`, swap);
-  }
-}
+    statusEl.innerText = relayStatus[ch];
 
-function resetESP(){
-  if(client.connected && confirm("Reset ESP?")){
-    client.publish('esp/reset','RESET');
-  }
-}
-
-client.on('connect', ()=>{
-  const mqttStatusEl = document.getElementById('mqttStatus');
-  mqttStatusEl.innerText='Connected';
-  mqttStatusEl.style.color='limegreen';
-  for(let i=1;i<=4;i++) client.subscribe(`relay${i}/status`);
-  client.subscribe(['esp/status','esp/ip','esp/uptime','sensor/waterLevel']);
-});
-
-client.on('reconnect',()=>{ document.getElementById('mqttStatus').innerText='Reconnecting...'; });
-client.on('offline',()=>{ document.getElementById('mqttStatus').innerText='Offline'; document.getElementById('mqttStatus').style.color='red'; });
-client.on('error',()=>{ document.getElementById('mqttStatus').innerText='Error'; document.getElementById('mqttStatus').style.color='red'; });
-
-client.on('message',(topic,msgRaw)=>{
-  const msg = msgRaw.toString();
-  for(let i=1;i<=4;i++){
-    if(topic===`relay${i}/status`){ relayStatus[i]=msg; updateUI(i); }
+    if(relayStatus[ch]==="ON"){
+      onBtn.className="on";
+      offBtn.className="off";
+    } else if(relayStatus[ch]==="OFF"){
+      onBtn.className="off";
+      offBtn.className="on";
+    } else {
+      onBtn.className="disabled";
+      offBtn.className="disabled";
+    }
   }
 
-  if(topic==='esp/status'){
-    const el=document.getElementById('espStatus');
-    el.innerText=msg;
-    el.className=(msg==='ONLINE')?'online':'offline';
+  function sendCommand(ch, cmd){
+    if(client.connected){
+      const swapped = (cmd==="ON")?"OFF":"ON"; // Active-low
+      client.publish(`relay${ch}/control`, swapped);
+    } else alert("MQTT not connected!");
   }
 
-  if(topic==='esp/ip') document.getElementById('espIP').innerText=msg;
-
-  if(topic==='esp/uptime'){
-    let s=parseInt(msg);
-    let h=Math.floor(s/3600);
-    let m=Math.floor((s%3600)/60);
-    let sec=s%60;
-    document.getElementById('espUptime').innerText=(`${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`);
+  function resetESP(){
+    if(client.connected && confirm("Reset ESP?")){
+      client.publish('esp/reset','RESET');
+    }
   }
 
-  if(topic==='sensor/waterLevel'){
-    let level=parseInt(msg);
-    if(level<0) level=0;
-    if(level>100) level=100;
-    const bar=document.getElementById('waterLevelBar');
-    bar.style.width=level+'%';
-    bar.innerText=level+'%';
-  }
-});
+  // ---------- MQTT EVENTS ----------
+  client.on('connect', () => {
+    document.getElementById("mqttStatus").innerText = "MQTT: Connected";
+    document.getElementById("mqttStatus").style.color = "limegreen";
+    client.subscribe([
+      'relay1/status','relay2/status','relay3/status','relay4/status',
+      'esp/status','esp/ip','esp/uptime'
+    ]);
+  });
+
+  client.on('reconnect', () => {
+    document.getElementById("mqttStatus").innerText = "MQTT: Reconnecting...";
+    document.getElementById("mqttStatus").style.color = "orange";
+  });
+
+  client.on('offline', () => {
+    document.getElementById("mqttStatus").innerText = "MQTT: Offline";
+    document.getElementById("mqttStatus").style.color = "red";
+  });
+
+  client.on('error', () => {
+    document.getElementById("mqttStatus").innerText = "MQTT: Error";
+    document.getElementById("mqttStatus").style.color = "red";
+  });
+
+  client.on('message', (topic,message)=>{
+    const msg = message.toString();
+
+    if(topic.startsWith('relay')){
+      for(let i=1;i<=4;i++){
+        if(topic===`relay${i}/status`){
+          relayStatus[i] = msg;
+          updateRelayUI(i);
+        }
+      }
+    }
+
+    if(topic==='esp/status'){
+      const espStatus = document.getElementById('espStatus');
+      espStatus.innerText = msg;
+      espStatus.className = (msg==="ONLINE")?"online":"offline";
+    }
+
+    if(topic==='esp/ip') document.getElementById('espIP').innerText = msg;
+
+    if(topic==='esp/uptime'){
+      let totalSec = parseInt(msg);
+      let hours = Math.floor(totalSec / 3600);
+      let minutes = Math.floor((totalSec % 3600) / 60);
+      let seconds = totalSec % 60;
+
+      const formatted = `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
+      document.getElementById('espUptime').innerText = formatted;
+    }
+  });
 </script>
-
 </body>
 </html>
