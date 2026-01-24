@@ -52,7 +52,6 @@
 <p>ESP Status: <span id="espStatus" class="offline">OFFLINE</span></p>
 <p>ESP IP: <b id="espIP">--</b></p>
 <p>ESP Uptime: <b id="espUptime">00:00:00</b></p>
-<!-- ✅ REMOVED: Reset button & CSS -->
 
 <p id="mqttStatus">MQTT: Disconnected</p>
 
@@ -75,35 +74,37 @@
     const onBtn = document.getElementById(`relay${ch}On`);
     const offBtn = document.getElementById(`relay${ch}Off`);
 
-    statusEl.innerText = relayStatus[ch];
+    statusEl.innerText = relayStatus[ch] || "--";
 
     if(relayStatus[ch]==="ON"){
-      onBtn.className="on";
-      offBtn.className="off";
-    } else if(relayStatus[ch]==="OFF"){
-      onBtn.className="off";
-      offBtn.className="on";
+      onBtn.className = "on";
+      offBtn.className = "off";
     } else {
-      onBtn.className="disabled";
-      offBtn.className="disabled";
+      onBtn.className = "off";
+      offBtn.className = "on";
     }
   }
 
   function sendCommand(ch, cmd){
     if(client.connected){
-      client.publish(`relay${ch}/control`, cmd);  // ✅ Direct ON/OFF
-    } else alert("MQTT not connected!");
+      client.publish(`relay${ch}/control`, cmd);
+    } else {
+      alert("MQTT not connected!");
+    }
   }
-
-  // ✅ REMOVED: resetESP() function
 
   // ---------- MQTT EVENTS ----------
   client.on('connect', () => {
-    document.getElementById("mqttStatus").innerText = "MQTT: Connected";
+    document.getElementById("mqttStatus").innerText = "MQTT: Connected ✅";
     document.getElementById("mqttStatus").style.color = "limegreen";
     client.subscribe([
-      'relay1/status','relay2/status','relay3/status','relay4/status',
-      'esp/+/status','esp/+/ip','esp/+/uptime'  // ✅ Fixed for unique ESP topics
+      'relay1/status',
+      'relay2/status', 
+      'relay3/status',
+      'relay4/status',
+      'esp/+/status',     // ✅ FIX 1: Catches esp/1234/status, esp/5678/status
+      'esp/+/ip',         // ✅ FIX 2: Catches esp/1234/ip
+      'esp/+/uptime'      // ✅ FIX 3: Catches esp/1234/uptime
     ]);
   });
 
@@ -129,24 +130,26 @@
   client.on('message', (topic,message)=>{
     const msg = message.toString();
 
-    // Relay status
+    // Relay status updates
     if(topic.match(/^relay[1-4]\/status$/)){
       const ch = parseInt(topic.charAt(5));
       relayStatus[ch] = msg;
       updateRelayUI(ch);
     }
 
-    // ESP status (esp/1234/status format)
+    // ✅ FIX 4: ESP status from esp/XXXX/status
     if(topic.match(/^esp\/\d+\/status$/)){
-      const espStatus = document.getElementById('espStatus');
-      espStatus.innerText = msg;
-      espStatus.className = (msg==="ONLINE")?"online":"offline";
+      const espStatusEl = document.getElementById('espStatus');
+      espStatusEl.innerText = msg;
+      espStatusEl.className = (msg==="ONLINE") ? "online" : "offline";
     }
 
+    // ✅ FIX 5: ESP IP from esp/XXXX/ip
     if(topic.match(/^esp\/\d+\/ip$/)){
       document.getElementById('espIP').innerText = msg;
     }
 
+    // ✅ FIX 6: ESP uptime from esp/XXXX/uptime
     if(topic.match(/^esp\/\d+\/uptime$/)){
       document.getElementById('espUptime').innerText = msg;
     }
