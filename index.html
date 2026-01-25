@@ -6,22 +6,9 @@
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
   <style>
-    body {
-      font-family: Arial;
-      text-align: center;
-      background: #f2f2f2;
-    }
-    .relay {
-      margin: 15px;
-    }
-    button {
-      width: 140px;
-      padding: 15px;
-      font-size: 18px;
-      border: none;
-      cursor: pointer;
-      border-radius: 5px;
-    }
+    body { font-family: Arial; text-align: center; background: #f2f2f2; }
+    .relay { margin: 15px; }
+    button { width: 140px; padding: 15px; font-size: 18px; border: none; cursor: pointer; border-radius: 5px; }
     .on { background: green; color: white; }
     .off { background: red; color: white; }
     #uptime { font-size: 18px; margin: 10px; font-weight: bold; }
@@ -44,7 +31,7 @@
     const statusTopic = `home/status/${deviceMac}`;
 
     const options = {
-      clean: false, // MUST be false to receive retained messages
+      clean: true,  // can be true now because retained messages exist
       connectTimeout: 4000,
       clientId: 'web_' + Math.random().toString(16).substr(2, 8),
       username: 'tohits',
@@ -61,7 +48,7 @@
     client.on('connect', () => {
       console.log('MQTT Connected');
 
-      // Subscribe to status first to get retained online/offline
+      // Subscribe to status first to get retained online/offline immediately
       client.subscribe(statusTopic, { qos: 1 });
       client.subscribe('home/uptime', { qos: 1 });
 
