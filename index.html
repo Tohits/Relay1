@@ -1,73 +1,98 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>4 Lights</title>
+  <meta charset="UTF-8">
+  <title>ESP MQTT Relay Control</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
   <style>
-    body { font-family:Arial; text-align:center; background:#f0f0f0; padding:20px; }
-    .light { display:inline-block; margin:20px; padding:20px; background:white; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.2); }
-    button { padding:15px 30px; margin:5px; border:none; border-radius:8px; font-size:16px; cursor:pointer; }
-    .on { background:#4CAF50; color:white; }
-    .off { background:#f44336; color:white; }
-    #status { position:fixed; top:10px; right:10px; padding:10px; background:#2196F3; color:white; border-radius:5px; }
+    body {
+      font-family: Arial;
+      text-align: center;
+      background: #f2f2f2;
+    }
+    .relay {
+      margin: 15px;
+    }
+    button {
+      width: 140px;
+      padding: 15px;
+      font-size: 18px;
+      border: none;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    .on {
+      background: green;
+      color: white;
+    }
+    .off {
+      background: red;
+      color: white;
+    }
   </style>
 </head>
+
 <body>
-  <div id="status">Connecting...</div>
-  
-  <h1>💡 4 Light Control</h1>
-  
-  <div class="light">
-    <h3>Light 1</h3>
-    <button class="on" onclick="setLight(1,true)">ON</button>
-    <button class="off" onclick="setLight(1,false)">OFF</button>
-    <div id="light1">OFF</div>
-  </div>
-  
-  <div class="light">
-    <h3>Light 2</h3>
-    <button class="on" onclick="setLight(2,true)">ON</button>
-    <button class="off" onclick="setLight(2,false)">OFF</button>
-    <div id="light2">OFF</div>
-  </div>
-  
-  <div class="light">
-    <h3>Light 3</h3>
-    <button class="on" onclick="setLight(3,true)">ON</button>
-    <button class="off" onclick="setLight(3,false)">OFF</button>
-    <div id="light3">OFF</div>
-  </div>
-  
-  <div class="light">
-    <h3>Light 4</h3>
-    <button class="on" onclick="setLight(4,true)">ON</button>
-    <button class="off" onclick="setLight(4,false)">OFF</button>
-    <div id="light4">OFF</div>
-  </div>
+  <h2>ESP 4-Channel Relay (MQTT)</h2>
+
+  <div id="relays"></div>
 
   <script>
-    const client = mqtt.connect('wss://broker.hivemq.com:8000/mqtt');
-    
+    const options = {
+      clean: true,
+      connectTimeout: 4000,
+      clientId: 'web_' + Math.random().toString(16).substr(2, 8),
+      username: 'tohits',
+      password: 'toh123@TOH'
+    };
+
+    const client = mqtt.connect(
+      'wss://93bad3def29641e399de9a7b9c676613.s1.eu.hivemq.cloud:8884/mqtt',
+      options
+    );
+
+    const relayState = [false, false, false, false];
+
     client.on('connect', () => {
-      document.getElementById('status').innerHTML = '✅ Connected';
-      
-      // Subscribe to status topics
-      client.subscribe('light1/status');
-      client.subscribe('light2/status');
-      client.subscribe('light3/status');
-      client.subscribe('light4/status');
+      console.log('MQTT Connected');
+
+      for (let i = 1; i <= 4; i++) {
+        client.subscribe(`home/relay/${i}/state`);
+      }
     });
-    
+
     client.on('message', (topic, message) => {
-      const lightNum = topic.split('/')[0].replace('light','');
-      const state = message.toString();
-      document.getElementById('light'+lightNum).innerHTML = state;
+      const payload = message.toString();
+      const match = topic.match(/relay\/(\d)\/state/);
+      if (match) {
+        const index = parseInt(match[1]) - 1;
+        relayState[index] = payload === 'ON';
+        render();
+      }
     });
-    
-    function setLight(num, state) {
-      const topic = 'light'+num+'/set';
-      client.publish(topic, state ? 'ON' : 'OFF');
+
+    function toggleRelay(relay) {
+      const cmd = relayState[relay - 1] ? 'OFF' : 'ON';
+      client.publish(`home/relay/${relay}/set`, cmd);
     }
+
+    function render() {
+      let html = '';
+      relayState.forEach((state, i) => {
+        html += `
+          <div class="relay">
+            <p>Relay ${i + 1}</p>
+            <button class="${state ? 'on' : 'off'}"
+              onclick="toggleRelay(${i + 1})">
+              ${state ? 'ON' : 'OFF'}
+            </button>
+          </div>`;
+      });
+      document.getElementById('relays').innerHTML = html;
+    }
+
+    render();
   </script>
 </body>
 </html>
