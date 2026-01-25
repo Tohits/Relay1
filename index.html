@@ -1,153 +1,73 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NodeMCU 4-Light Control</title>
+  <title>4 Lights</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background: linear-gradient(135deg,#1e3c72 0%,#2a5298 100%); min-height: 100vh; padding: 20px; }
-    .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); overflow: hidden; }
-    .header { background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); color: white; padding: 30px; text-align: center; }
-    .header h1 { font-size: 28px; margin-bottom: 10px; }
-    .status { display: inline-block; padding: 8px 16px; background: rgba(255,255,255,0.2); border-radius: 20px; font-size: 14px; }
-    .controls { padding: 40px; display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 20px; }
-    .relay-card { background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 16px; padding: 25px; text-align: center; transition: all 0.3s ease; }
-    .relay-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-    .relay-card.active { border-color: #28a745; background: linear-gradient(135deg,#d4edda 0%,#c3e6cb 100%); }
-    .relay-title { font-size: 16px; font-weight: 600; color: #333; margin-bottom: 20px; }
-    .relay-buttons { display: flex; gap: 10px; justify-content: center; }
-    button { flex: 1; padding: 12px 20px; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
-    .btn-on { background: #28a745; color: white; } .btn-on:hover:not(:disabled) { background: #218838; transform: scale(1.05); }
-    .btn-off { background: #dc3545; color: white; } .btn-off:hover:not(:disabled) { background: #c82333; transform: scale(1.05); }
-    button:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
-    .status-indicator { width: 12px; height: 12px; border-radius: 50%; margin: 0 auto 10px; transition: all 0.3s ease; }
-    .status-on { background: #28a745; box-shadow: 0 0 10px #28a745; } .status-off { background: #6c757d; }
-    .connection { position: fixed; top: 20px; right: 20px; padding: 10px 20px; border-radius: 25px; color: white; font-weight: 500; z-index: 1000; }
-    .connected { background: #28a745; } .disconnected { background: #dc3545; }
-    @media (max-width: 768px) { .controls { grid-template-columns: 1fr 1fr; padding: 20px; } }
+    body { font-family:Arial; text-align:center; background:#f0f0f0; padding:20px; }
+    .light { display:inline-block; margin:20px; padding:20px; background:white; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.2); }
+    button { padding:15px 30px; margin:5px; border:none; border-radius:8px; font-size:16px; cursor:pointer; }
+    .on { background:#4CAF50; color:white; }
+    .off { background:#f44336; color:white; }
+    #status { position:fixed; top:10px; right:10px; padding:10px; background:#2196F3; color:white; border-radius:5px; }
   </style>
 </head>
 <body>
-  <div class="connection" id="connection">Connecting...</div>
+  <div id="status">Connecting...</div>
   
-  <div class="container">
-    <div class="header">
-      <h1>💡 NodeMCU 4-Light Control</h1>
-      <div class="status" id="mqttStatus">MQTT: Initializing</div>
-    </div>
-    
-    <div class="controls">
-      <div class="relay-card" id="relay1">
-        <div class="status-indicator status-off" id="status1"></div>
-        <div class="relay-title">Light 1 (D1)</div>
-        <div class="relay-buttons">
-          <button class="btn-on" onclick="toggleRelay(1, true)">ON</button>
-          <button class="btn-off" onclick="toggleRelay(1, false)">OFF</button>
-        </div>
-      </div>
-      
-      <div class="relay-card" id="relay2">
-        <div class="status-indicator status-off" id="status2"></div>
-        <div class="relay-title">Light 2 (D2)</div>
-        <div class="relay-buttons">
-          <button class="btn-on" onclick="toggleRelay(2, true)">ON</button>
-          <button class="btn-off" onclick="toggleRelay(2, false)">OFF</button>
-        </div>
-      </div>
-      
-      <div class="relay-card" id="relay3">
-        <div class="status-indicator status-off" id="status3"></div>
-        <div class="relay-title">Light 3 (D5)</div>
-        <div class="relay-buttons">
-          <button class="btn-on" onclick="toggleRelay(3, true)">ON</button>
-          <button class="btn-off" onclick="toggleRelay(3, false)">OFF</button>
-        </div>
-      </div>
-      
-      <div class="relay-card" id="relay4">
-        <div class="status-indicator status-off" id="status4"></div>
-        <div class="relay-title">Light 4 (D6)</div>
-        <div class="relay-buttons">
-          <button class="btn-on" onclick="toggleRelay(4, true)">ON</button>
-          <button class="btn-off" onclick="toggleRelay(4, false)">OFF</button>
-        </div>
-      </div>
-    </div>
+  <h1>💡 4 Light Control</h1>
+  
+  <div class="light">
+    <h3>Light 1</h3>
+    <button class="on" onclick="setLight(1,true)">ON</button>
+    <button class="off" onclick="setLight(1,false)">OFF</button>
+    <div id="light1">OFF</div>
+  </div>
+  
+  <div class="light">
+    <h3>Light 2</h3>
+    <button class="on" onclick="setLight(2,true)">ON</button>
+    <button class="off" onclick="setLight(2,false)">OFF</button>
+    <div id="light2">OFF</div>
+  </div>
+  
+  <div class="light">
+    <h3>Light 3</h3>
+    <button class="on" onclick="setLight(3,true)">ON</button>
+    <button class="off" onclick="setLight(3,false)">OFF</button>
+    <div id="light3">OFF</div>
+  </div>
+  
+  <div class="light">
+    <h3>Light 4</h3>
+    <button class="on" onclick="setLight(4,true)">ON</button>
+    <button class="off" onclick="setLight(4,false)">OFF</button>
+    <div id="light4">OFF</div>
   </div>
 
   <script>
-    // HiveMQ Cloud WebSocket (UNCHANGED - Perfect)
-    const mqttUrl = 'wss://93bad3def29641e399de9a7b9c676613.s1.eu.hivemq.cloud:8884/mqtt';
-    const mqttUser = 'tohits';
-    const mqttPassword = 'toh123@TOH';
+    const client = mqtt.connect('wss://broker.hivemq.com:8000/mqtt');
     
-    const topics = {
-      set: ['relay1/set', 'relay2/set', 'relay3/set', 'relay4/set'],
-      status: ['relay1/status', 'relay2/status', 'relay3/status', 'relay4/status']
-    };
-    
-    let mqttClient;
-    let relayStates = [false, false, false, false];
-    
-    function connectMQTT() {
-      console.log('Connecting:', mqttUrl);
-      mqttClient = mqtt.connect(mqttUrl, {
-        username: mqttUser,
-        password: mqttPassword,
-        clientId: 'LightControl_' + Math.random().toString(16).substr(2, 8),
-        rejectUnauthorized: false
-      });
+    client.on('connect', () => {
+      document.getElementById('status').innerHTML = '✅ Connected';
       
-      mqttClient.on('connect', () => {
-        console.log('✅ MQTT Connected!');
-        document.getElementById('connection').textContent = '✅ Connected';
-        document.getElementById('connection').className = 'connection connected';
-        document.getElementById('mqttStatus').textContent = 'MQTT: Connected';
-        
-        topics.status.forEach(topic => mqttClient.subscribe(topic));
-      });
-      
-      mqttClient.on('message', (topic, message) => {
-        const state = message.toString() === '1';
-        const relayIndex = topics.status.indexOf(topic);
-        if (relayIndex !== -1) {
-          relayStates[relayIndex] = state;
-          updateRelayUI(relayIndex + 1, state);
-        }
-      });
-      
-      mqttClient.on('error', (err) => {
-        console.error('MQTT Error:', err);
-        document.getElementById('connection').textContent = '❌ Error';
-        document.getElementById('connection').className = 'connection disconnected';
-      });
-    }
+      // Subscribe to status topics
+      client.subscribe('light1/status');
+      client.subscribe('light2/status');
+      client.subscribe('light3/status');
+      client.subscribe('light4/status');
+    });
     
-    function toggleRelay(relayNum, state) {
-      if (!mqttClient?.connected) {
-        alert('MQTT Not Connected!');
-        return;
-      }
-      const topic = topics.set[relayNum - 1];
-      mqttClient.publish(topic, state ? '1' : '0');
-    }
+    client.on('message', (topic, message) => {
+      const lightNum = topic.split('/')[0].replace('light','');
+      const state = message.toString();
+      document.getElementById('light'+lightNum).innerHTML = state;
+    });
     
-    function updateRelayUI(relayNum, state) {
-      const card = document.getElementById(`relay${relayNum}`);
-      const status = document.getElementById(`status${relayNum}`);
-      if (state) {
-        card.classList.add('active');
-        status.className = 'status-indicator status-on';
-      } else {
-        card.classList.remove('active');
-        status.className = 'status-indicator status-off';
-      }
+    function setLight(num, state) {
+      const topic = 'light'+num+'/set';
+      client.publish(topic, state ? 'ON' : 'OFF');
     }
-    
-    connectMQTT();
-    setInterval(() => { if (!mqttClient?.connected) connectMQTT(); }, 5000);
   </script>
 </body>
 </html>
