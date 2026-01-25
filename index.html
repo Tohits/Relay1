@@ -30,15 +30,33 @@
       background: red;
       color: white;
     }
+    #uptime {
+      font-size: 18px;
+      margin: 10px;
+      font-weight: bold;
+    }
+    #status {
+      font-size: 18px;
+      margin: 5px;
+      font-weight: bold;
+    }
+    .online { color: green; }
+    .offline { color: red; }
   </style>
 </head>
 
 <body>
   <h2>ESP 4-Channel Light Control (MQTT)</h2>
 
+  <div id="status">Status: --</div>
+  <div id="uptime">Uptime: --</div>
   <div id="relays"></div>
 
   <script>
+    // Replace with your device MAC without colons
+    const deviceMac = "A1B2C3D4E5F6"; 
+    const statusTopic = `home/status/${deviceMac}`;
+
     const options = {
       clean: true,
       connectTimeout: 4000,
@@ -56,13 +74,34 @@
 
     client.on('connect', () => {
       console.log('MQTT Connected');
+
+      // Subscribe to relay states
       for (let i = 1; i <= 4; i++) {
         client.subscribe(`home/relay/${i}/state`);
       }
+      // Subscribe to uptime and status
+      client.subscribe('home/uptime');
+      client.subscribe(statusTopic);
     });
 
     client.on('message', (topic, message) => {
       const payload = message.toString();
+
+      if (topic === 'home/uptime') {
+        document.getElementById('uptime').innerText = 'Uptime: ' + formatUptime(parseInt(payload));
+      }
+
+      if (topic === statusTopic) {
+        const el = document.getElementById('status');
+        if (payload === 'online') {
+          el.innerText = 'Status: Online';
+          el.className = 'online';
+        } else {
+          el.innerText = 'Status: Offline';
+          el.className = 'offline';
+        }
+      }
+
       const match = topic.match(/relay\/(\d)\/state/);
       if (match) {
         const index = parseInt(match[1]) - 1;
@@ -74,6 +113,16 @@
     function toggleRelay(relay) {
       const cmd = relayState[relay - 1] ? 'OFF' : 'ON';
       client.publish(`home/relay/${relay}/set`, cmd);
+    }
+
+    function formatUptime(seconds) {
+      const days = Math.floor(seconds / 86400);
+      seconds %= 86400;
+      const hours = Math.floor(seconds / 3600);
+      seconds %= 3600;
+      const minutes = Math.floor(seconds / 60);
+      seconds %= 60;
+      return `${days}d ${hours}h ${minutes}m ${seconds}s`;
     }
 
     function render() {
