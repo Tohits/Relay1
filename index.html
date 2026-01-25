@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>ESP MQTT Relay Control</title>
+  <title>ESP MQTT Light Control</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
   <style>
@@ -34,7 +34,7 @@
 </head>
 
 <body>
-  <h2>ESP 4-Channel Relay (MQTT)</h2>
+  <h2>ESP 4-Channel Light Control (MQTT)</h2>
 
   <div id="relays"></div>
 
@@ -56,7 +56,6 @@
 
     client.on('connect', () => {
       console.log('MQTT Connected');
-
       for (let i = 1; i <= 4; i++) {
         client.subscribe(`home/relay/${i}/state`);
       }
@@ -82,7 +81,7 @@
       relayState.forEach((state, i) => {
         html += `
           <div class="relay">
-            <p>Relay ${i + 1}</p>
+            <p>Light ${i + 1}</p>
             <button class="${state ? 'on' : 'off'}"
               onclick="toggleRelay(${i + 1})">
               ${state ? 'ON' : 'OFF'}
