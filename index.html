@@ -1,117 +1,235 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>ESP MQTT Light Control</title>
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Hub</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; text-align: center; background: #eef2f5; color: #333; margin: 0; padding: 20px; }
+        h2 { color: #2c3e50; margin-bottom: 5px; }
+        
+        /* Status Bar */
+        .status-bar { margin-bottom: 20px; font-size: 14px; font-weight: bold; }
+        .connected { color: green; }
+        .disconnected { color: red; }
 
-  <style>
-    body { font-family: Arial; text-align: center; background: #f2f2f2; }
-    .relay { margin: 15px; }
-    button { width: 140px; padding: 15px; font-size: 18px; border: none; cursor: pointer; border-radius: 5px; }
-    .on { background: green; color: white; }
-    .off { background: red; color: white; }
-    #uptime, #status { font-size: 18px; margin: 10px; font-weight: bold; }
-    .online { color: green; }
-    .offline { color: red; }
-  </style>
+        /* Device ID Input */
+        .id-wrapper { background: white; padding: 15px; border-radius: 10px; display: inline-block; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        input[type="text"] { padding: 8px; border: 1px solid #ccc; border-radius: 5px; width: 200px; text-align: center; font-weight: bold; font-size: 16px; color: #007bff; }
+
+        /* Relay Grid */
+        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; max-width: 400px; margin: 0 auto; }
+        .relay-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: 0.2s; }
+        .relay-card h3 { margin: 0 0 10px 0; font-size: 16px; color: #555; }
+        
+        /* Toggle Buttons */
+        .btn { width: 100%; padding: 15px; font-size: 18px; border: none; cursor: pointer; border-radius: 8px; font-weight: bold; transition: 0.2s; }
+        .btn.on { background: #28a745; color: white; box-shadow: 0 4px #1e7e34; }
+        .btn.off { background: #dc3545; color: white; box-shadow: 0 4px #bd2130; }
+        .btn:active { transform: translateY(3px); box-shadow: none !important; }
+
+        /* Info Section */
+        .info-box { max-width: 400px; margin: 20px auto; background: white; padding: 15px; border-radius: 10px; text-align: left; font-size: 14px; color: #666; }
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .val { font-weight: bold; color: #333; }
+
+        /* OTA Section */
+        .ota-box { max-width: 400px; margin: 20px auto; background: #fff3cd; padding: 15px; border-radius: 10px; border: 1px solid #ffeeba; }
+        .ota-input { width: 90%; font-size: 12px; padding: 8px; margin-bottom: 10px; }
+        .ota-btn { background: #ffc107; color: #333; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; width: 100%; }
+        .ota-btn:hover { background: #e0a800; }
+
+    </style>
 </head>
 
 <body>
-  <h2>ESP 4-Channel Light Control (MQTT)</h2>
-  <div id="status">Status: --</div>
-  <div id="uptime">Uptime: --</div>
-  <div id="relays"></div>
 
-  <script>
-    const statusTopic = "home/status/esp1"; // fixed topic
+    <h2>🏠 Smart Home Hub</h2>
+    <div id="mqttStatus" class="status-bar disconnected">Connecting to Cloud...</div>
+
+    <div class="id-wrapper">
+        <label style="display:block; font-size:12px; color:#999; margin-bottom:5px;">CONTROL DEVICE ID</label>
+        <input type="text" id="targetDevice" placeholder="Waiting for device..." oninput="manualID(this.value)">
+    </div>
+
+    <div class="grid">
+        <div class="relay-card">
+            <h3>Light 1</h3>
+            <button id="btn1" class="btn off" onclick="toggleRelay(1)">OFF</button>
+        </div>
+        <div class="relay-card">
+            <h3>Light 2</h3>
+            <button id="btn2" class="btn off" onclick="toggleRelay(2)">OFF</button>
+        </div>
+        <div class="relay-card">
+            <h3>Fan</h3>
+            <button id="btn3" class="btn off" onclick="toggleRelay(3)">OFF</button>
+        </div>
+        <div class="relay-card">
+            <h3>Socket</h3>
+            <button id="btn4" class="btn off" onclick="toggleRelay(4)">OFF</button>
+        </div>
+    </div>
+
+    <div class="info-box">
+        <div class="info-row"><span>Status</span> <span id="devStatus" class="val" style="color:red">Offline</span></div>
+        <div class="info-row" style="border:none;"><span>Uptime</span> <span id="devUptime" class="val">--</span></div>
+    </div>
+
+    <div class="ota-box">
+        <strong>⚡ Firmware Update</strong>
+        <p style="margin:5px 0 10px 0; font-size:12px;">Paste .bin URL below to update device.</p>
+        <input type="text" id="otaUrl" class="ota-input" placeholder="http://server.com/firmware.bin">
+        <button class="ota-btn" onclick="sendUpdate()">FLASH UPDATE</button>
+    </div>
+
+<script>
+    // --- 1. MQTT CONFIGURATION ---
+    const brokerUrl = 'wss://93bad3def29641e399de9a7b9c676613.s1.eu.hivemq.cloud:8884/mqtt';
     const options = {
-      clean: true,
-      connectTimeout: 4000,
-      clientId: 'web_' + Math.random().toString(16).substr(2, 8),
-      username: 'tohits',
-      password: 'toh123@TOH'
+        username: 'tohits',
+        password: 'toh123@TOH',
+        clean: true,
+        reconnectPeriod: 2000,
+        connectTimeout: 30 * 1000,
+        rejectUnauthorized: false
     };
 
-    const client = mqtt.connect(
-      'wss://93bad3def29641e399de9a7b9c676613.s1.eu.hivemq.cloud:8884/mqtt',
-      options
-    );
+    const client = mqtt.connect(brokerUrl, options);
+    
+    // State
+    let activeDeviceId = null;
+    let relayStates = [false, false, false, false]; // Stores state of R1, R2, R3, R4
 
-    const relayState = [false, false, false, false];
+    // UI Elements
+    const ui = {
+        mqtt: document.getElementById('mqttStatus'),
+        input: document.getElementById('targetDevice'),
+        status: document.getElementById('devStatus'),
+        uptime: document.getElementById('devUptime'),
+        btns: [
+            document.getElementById('btn1'),
+            document.getElementById('btn2'),
+            document.getElementById('btn3'),
+            document.getElementById('btn4')
+        ]
+    };
 
+    // --- 2. MQTT LOGIC ---
     client.on('connect', () => {
-      console.log('MQTT Connected');
-
-      // Subscribe to status and uptime first to get retained messages
-      client.subscribe(statusTopic, { qos: 1 });
-      client.subscribe('home/uptime', { qos: 1 });
-
-      // Subscribe to relay states
-      for (let i = 1; i <= 4; i++) {
-        client.subscribe(`home/relay/${i}/state`, { qos: 1 });
-      }
+        console.log("Connected to Cloud");
+        ui.mqtt.innerText = "☁️ Cloud Connected";
+        ui.mqtt.className = "status-bar connected";
+        
+        // Subscribe to finding ALL devices initially
+        client.subscribe('home/+/status');
     });
 
     client.on('message', (topic, message) => {
-      const payload = message.toString();
+        const msg = message.toString();
+        // Topic format: home / DEVICE_ID / ...
+        const parts = topic.split('/');
+        
+        if (parts.length < 3 || parts[0] !== 'home') return;
+        
+        const devId = parts[1]; // e.g., ESP_A1B2C3
 
-      // Status
-      if (topic === statusTopic) {
-        const el = document.getElementById('status');
-        if (payload === 'online') {
-          el.innerText = 'Status: Online';
-          el.className = 'online';
-        } else {
-          el.innerText = 'Status: Offline';
-          el.className = 'offline';
+        // Auto-Discovery: If we haven't picked a device, pick the first one we hear
+        if (!activeDeviceId) {
+            setActiveDevice(devId);
         }
-      }
 
-      // Uptime
-      if (topic === 'home/uptime') {
-        document.getElementById('uptime').innerText = 'Uptime: ' + formatUptime(parseInt(payload));
-      }
-
-      // Relay states
-      const match = topic.match(/relay\/(\d)\/state/);
-      if (match) {
-        const index = parseInt(match[1]) - 1;
-        relayState[index] = payload === 'ON';
-        render();
-      }
+        // Only process messages for the ACTIVE device
+        if (devId === activeDeviceId) {
+            handleMessage(parts, msg);
+        }
     });
 
-    function toggleRelay(relay) {
-      const cmd = relayState[relay - 1] ? 'OFF' : 'ON';
-      client.publish(`home/relay/${relay}/set`, cmd);
+    function setActiveDevice(id) {
+        activeDeviceId = id;
+        ui.input.value = activeDeviceId;
+        console.log("Locked onto Device: " + activeDeviceId);
+        
+        // Subscribe to specific device topics
+        client.subscribe(`home/${activeDeviceId}/relay/+/state`);
+        client.subscribe(`home/${activeDeviceId}/uptime`);
     }
 
-    function formatUptime(seconds) {
-      const days = Math.floor(seconds / 86400);
-      seconds %= 86400;
-      const hours = Math.floor(seconds / 3600);
-      seconds %= 3600;
-      const minutes = Math.floor(seconds / 60);
-      seconds %= 60;
-      return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+    function handleMessage(parts, msg) {
+        // 1. Relay State: home/ID/relay/X/state
+        if (parts[2] === 'relay' && parts[4] === 'state') {
+            const rIndex = parseInt(parts[3]) - 1; // Convert '1' to 0
+            if (rIndex >= 0 && rIndex < 4) {
+                relayStates[rIndex] = (msg === 'ON');
+                updateButton(rIndex);
+            }
+        }
+        // 2. Status: home/ID/status
+        else if (parts[2] === 'status') {
+            ui.status.innerText = msg.toUpperCase();
+            ui.status.style.color = (msg === 'online') ? 'green' : 'orange';
+        }
+        // 3. Uptime: home/ID/uptime
+        else if (parts[2] === 'uptime') {
+            ui.uptime.innerText = formatTime(parseInt(msg));
+        }
     }
 
-    function render() {
-      let html = '';
-      relayState.forEach((state, i) => {
-        html += `
-          <div class="relay">
-            <p>Light ${i + 1}</p>
-            <button class="${state ? 'on' : 'off'}" onclick="toggleRelay(${i + 1})">
-              ${state ? 'ON' : 'OFF'}
-            </button>
-          </div>`;
-      });
-      document.getElementById('relays').innerHTML = html;
+    // --- 3. CONTROLS ---
+    function toggleRelay(rNum) {
+        if (!activeDeviceId) return alert("Waiting for device...");
+        
+        const rIndex = rNum - 1;
+        // Logic: If currently ON, send OFF. Else send ON.
+        const cmd = relayStates[rIndex] ? "OFF" : "ON";
+        
+        const topic = `home/${activeDeviceId}/relay/${rNum}/set`;
+        client.publish(topic, cmd);
     }
 
-    render();
-  </script>
+    function sendUpdate() {
+        if (!activeDeviceId) return alert("No device selected.");
+        const url = document.getElementById('otaUrl').value.trim();
+        if(!url) return alert("Paste a URL first.");
+        
+        if(confirm(`Flash firmware to ${activeDeviceId}?`)) {
+            client.publish(`home/${activeDeviceId}/update`, url);
+            alert("Update command sent!");
+        }
+    }
+
+    function manualID(val) {
+        // Allow user to manually type ID if auto-discovery fails
+        if(val.length > 5) {
+            activeDeviceId = val;
+            // Resubscribe to new ID
+            client.subscribe(`home/${activeDeviceId}/relay/+/state`);
+            client.subscribe(`home/${activeDeviceId}/uptime`);
+            client.subscribe(`home/${activeDeviceId}/status`);
+        }
+    }
+
+    // --- 4. UI HELPERS ---
+    function updateButton(index) {
+        const btn = ui.btns[index];
+        const isOn = relayStates[index];
+        
+        if (isOn) {
+            btn.className = "btn on";
+            btn.innerText = "ON";
+        } else {
+            btn.className = "btn off";
+            btn.innerText = "OFF";
+        }
+    }
+
+    function formatTime(seconds) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        return `${h}h ${m}m`;
+    }
+</script>
+
 </body>
 </html>
